@@ -4,6 +4,7 @@ package fr.lretrain.melopet;
 public enum Expression {
     CONTENT("Content"),
     DANSE("Danse"),
+    CONCENTRE("Concentré"),
     DORT("Dort"),
     FATIGUE("Fatigué"),
     AFFAME("Affamé"),

@@ -62,18 +62,85 @@ object MoodResolver {
             .putString("o:" + artistKey(artist), mood.name).apply()
     }
 
+    /** Résultat de l'analyse d'un artiste : ambiance + affinité 0..1 avec chaque activité. */
+    class TrackInfo(val mood: Mood, val affinity: FloatArray)
+
+    // Genres qui conviennent à chaque activité (index = Occupation.ordinal).
+    private val ACTIVITY_WORDS: List<List<String>> = listOf(
+        // Miner
+        listOf(
+            "metal", "rock", "punk", "hardcore", "industrial", "grunge", "drum and bass", "dnb",
+            "techno", "hardstyle", "rap", "trap", "drill", "stoner", "thrash", "work song", "hard"
+        ),
+        // Étudier
+        listOf(
+            "classical", "lo-fi", "lofi", "jazz", "piano", "instrumental", "post-rock", "baroque",
+            "soundtrack", "score", "chillhop", "minimal", "study", "math rock", "idm", "bossa", "modern classical"
+        ),
+        // Méditer
+        listOf(
+            "ambient", "new age", "drone", "meditation", "dream pop", "shoegaze", "downtempo", "chant",
+            "world", "indian", "raga", "healing", "nature", "sleep", "gregorian", "space music"
+        )
+    )
+
+    /** Affinités par défaut selon l'ambiance, quand les genres ne disent rien. */
+    fun moodAffinity(m: Mood): FloatArray = when (m) {
+        Mood.ENERGIQUE -> floatArrayOf(0.9f, 0.1f, 0f)
+        Mood.URBAIN -> floatArrayOf(0.7f, 0.2f, 0.1f)
+        Mood.FESTIF -> floatArrayOf(0.5f, 0.2f, 0.1f)
+        Mood.CHILL -> floatArrayOf(0.1f, 0.7f, 0.6f)
+        Mood.SOMBRE -> floatArrayOf(0.3f, 0.4f, 0.5f)
+        else -> floatArrayOf(0.3f, 0.3f, 0.3f)
+    }
+
     /** À appeler hors du thread principal (accès réseau). */
-    fun resolve(ctx: Context, artist: String): Mood {
-        override(ctx, artist)?.let { return it }
+    fun resolve(ctx: Context, artist: String): TrackInfo {
+        val forced = override(ctx, artist)
         val prefs = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val key = "c:" + artistKey(artist)
-        prefs.getString(key, null)?.let { cached ->
-            Mood.values().firstOrNull { it.name == cached }?.let { return it }
+        val key = "c2:" + artistKey(artist)
+        var info = prefs.getString(key, null)?.let { decode(it) }
+        if (info == null) {
+            val tags = fetchTags(primaryArtist(artist))
+            if (tags != null) {
+                info = analyse(tags)
+                prefs.edit().putString(key, encode(info)).apply()
+            }
         }
-        val tags = fetchTags(primaryArtist(artist)) ?: return Mood.NEUTRE // réseau KO : on réessaiera
+        if (forced != null) {
+            // Ambiance corrigée par l'utilisateur ; on garde les affinités des genres si on les a.
+            return TrackInfo(forced, info?.affinity ?: moodAffinity(forced))
+        }
+        return info ?: TrackInfo(Mood.NEUTRE, moodAffinity(Mood.NEUTRE)) // réseau KO : on réessaiera
+    }
+
+    fun analyse(tags: List<Pair<String, Int>>): TrackInfo {
         val mood = classify(tags)
-        prefs.edit().putString(key, mood.name).apply()
-        return mood
+        val score = FloatArray(Occupation.values().size)
+        for ((tag, count) in tags) {
+            val t = tag.lowercase()
+            for (i in ACTIVITY_WORDS.indices) {
+                if (ACTIVITY_WORDS[i].any { t.contains(it) }) score[i] += count.coerceAtLeast(1).toFloat()
+            }
+        }
+        val best = score.maxOrNull() ?: 0f
+        val fallback = moodAffinity(mood)
+        val aff = FloatArray(score.size) { i ->
+            if (best > 0f) 0.7f * (score[i] / best) + 0.3f * fallback[i] else fallback[i]
+        }
+        return TrackInfo(mood, aff)
+    }
+
+    private fun encode(info: TrackInfo): String =
+        info.mood.name + ";" + info.affinity.joinToString(";")
+
+    private fun decode(s: String): TrackInfo? {
+        val parts = s.split(";")
+        val mood = Mood.values().firstOrNull { it.name == parts.getOrNull(0) } ?: return null
+        val aff = FloatArray(Occupation.values().size) { i ->
+            parts.getOrNull(i + 1)?.toFloatOrNull() ?: moodAffinity(mood)[i]
+        }
+        return TrackInfo(mood, aff)
     }
 
     fun classify(tags: List<Pair<String, Int>>): Mood {

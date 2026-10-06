@@ -9,13 +9,15 @@ public final class SpriteRenderer {
 
     // Couches logiques de la créature
     private static final int T = 0, OUT = 1, BODY = 2, LIGHT = 3, SHADE = 4, ACC = 5,
-            EYE = 6, WHITE = 7, CHEEK = 8, MOUTH = 9;
+            EYE = 6, WHITE = 7, CHEEK = 8, MOUTH = 9,
+            WOOD = 10, METAL = 11, ROCK = 12, ROCKD = 13, PAGE = 14, LINE = 15;
 
     private static final int C_OUT = 0xFF1E1A2B;
     private static final int C_WHITE = 0xFFFFFFFF;
     private static final int C_CHEEK = 0xFFFF7A9A;
     private static final int C_MOUTH = 0xFF7A1F3D;
     private static final int C_SWEAT = 0xFF8FD8FF;
+    private static final int C_SPARK = 0xFFFFE14D;
 
     private static final int GROUND_Y = 29;
 
@@ -33,17 +35,22 @@ public final class SpriteRenderer {
      * @param form    ambiance qui définit le corps (ambiance dominante / forme adulte)
      * @param current ambiance du morceau en cours (ciel, notes)
      * @param frame   0 ou 1, pour l'animation
+     * @param occ     activité en cours (null = aucune)
      */
     public static int[] render(Stage stage, Mood form, Mood current, Expression expr,
-                               boolean playing, int xp, int frame) {
+                               boolean playing, int xp, int frame, Occupation occ) {
         int[] g = new int[N * N];
         boolean egg = stage == Stage.OEUF;
+        boolean acting = occ != null && playing && !egg && expr == Expression.CONCENTRE;
         boolean still = expr == Expression.DORT || expr == Expression.FATIGUE
                 || expr == Expression.MALADE;
 
         int dx = 0, dy = 0;
         if (egg) {
             if (playing) dx = frame == 0 ? -1 : 1;
+        } else if (acting) {
+            if (occ == Occupation.MEDITER) dy = frame == 0 ? -2 : -3;
+            else if (occ == Occupation.MINER) dy = frame == 0 ? -1 : 0;
         } else if (expr == Expression.DANSE) {
             dy = frame == 0 ? 0 : -2;
             dx = frame == 0 ? -1 : 1;
@@ -66,6 +73,7 @@ public final class SpriteRenderer {
                 cx = 16; cy = 18; rx = 10; ry = 9;
                 break;
         }
+        if (acting && occ == Occupation.MINER) cx -= 4; // place pour la pioche et le rocher
         int baseCx = cx;
         cx += dx;
         cy += dy;
@@ -82,8 +90,11 @@ public final class SpriteRenderer {
                 set(g, cx + half + x, fy - 1, SHADE);
             }
             int ay = expr == Expression.DANSE ? cy - 3 : cy + 2;
+            int ayRight = ay;
+            if (acting && occ == Occupation.MINER) ayRight = frame == 0 ? cy - 1 : cy + 2;
+            if (acting && occ == Occupation.ETUDIER) { ay = cy + 3; ayRight = cy + 3; }
             ellipse(g, cx - rx - 1, ay, 1, 2, BODY);
-            ellipse(g, cx + rx + 1, ay, 1, 2, BODY);
+            ellipse(g, cx + rx + 1, ayRight, 1, 2, BODY);
         }
 
         // Corps
@@ -119,7 +130,9 @@ public final class SpriteRenderer {
             drawEggDetails(g, cx, cy, xp);
         } else {
             if (grown) drawAccessory(g, form, stage, cx, cy, rx, ry, frame, still);
-            drawFace(g, stage, form, expr, cx, cy);
+            drawFace(g, stage, form, expr, cx, cy, acting ? occ : null);
+            if (acting && occ == Occupation.MINER) drawMining(g, cx, cy, rx, frame);
+            if (acting && occ == Occupation.ETUDIER) drawBook(g, stage, cx, cy, frame);
         }
 
         // Contour automatique
@@ -160,7 +173,7 @@ public final class SpriteRenderer {
             int sc = mix(sky1, C_WHITE, bright ? 0.9 : 0.4);
             out[STARS[i][1] * N + STARS[i][0]] = sc;
         }
-        int sw = rx - 1 - (dy < 0 ? 1 : 0);
+        int sw = rx - 1 - (dy < 0 ? 1 : 0) - (acting && occ == Occupation.MEDITER ? 2 : 0);
         for (int x = baseCx - sw; x <= baseCx + sw; x++) putPx(out, x, GROUND_Y, shadow);
         for (int x = baseCx - sw + 2; x <= baseCx + sw - 2; x++) putPx(out, x, GROUND_Y + 1, shadow);
 
@@ -170,7 +183,7 @@ public final class SpriteRenderer {
 
         // Effets par-dessus
         int fx = mix(current.accent, C_WHITE, 0.2);
-        if (playing) {
+        if (playing && !acting) {
             if (frame == 0) {
                 glyph(out, NOTE, 1, 10, fx);
                 glyph(out, NOTE, 27, 3, fx);
@@ -184,6 +197,7 @@ public final class SpriteRenderer {
             glyph(out, ZED, 23, 5 - frame, zc);
             glyph(out, ZED, 27, 1 - frame + 1, zc);
         }
+        if (acting) drawActivityEffects(out, occ, current, cx, cy, rx, ry, frame);
         if (expr == Expression.MALADE && !egg) {
             int sx = cx + rx - 2, sy = cy - ry + 2 + frame;
             putPx(out, sx, sy, C_SWEAT);
@@ -308,7 +322,8 @@ public final class SpriteRenderer {
         }
     }
 
-    private static void drawFace(int[] g, Stage stage, Mood form, Expression expr, int cx, int cy) {
+    private static void drawFace(int[] g, Stage stage, Mood form, Expression expr, int cx, int cy,
+                                 Occupation occ) {
         boolean baby = stage == Stage.BEBE;
         int s = baby ? 2 : (stage == Stage.ADO ? 3 : 4);
         int eh = baby ? 2 : 3;
@@ -318,7 +333,42 @@ public final class SpriteRenderer {
         boolean shades = form == Mood.URBAIN && !baby
                 && (expr == Expression.CONTENT || expr == Expression.DANSE);
 
+        if (expr == Expression.CONCENTRE && occ != null) {
+            switch (occ) {
+                case MINER: // regard déterminé
+                    for (int r = 1; r < eh; r++) {
+                        set(g, cx - s - 1, ey + r, eye);
+                        set(g, cx - s, ey + r, eye);
+                        set(g, cx + s, ey + r, eye);
+                        set(g, cx + s + 1, ey + r, eye);
+                    }
+                    set(g, cx - s - 2, ey - 1, EYE);
+                    set(g, cx - s - 1, ey, EYE);
+                    set(g, cx + s + 2, ey - 1, EYE);
+                    set(g, cx + s + 1, ey, EYE);
+                    set(g, cx - 1, my, EYE);
+                    set(g, cx, my, EYE);
+                    set(g, cx + 1, my, EYE);
+                    return;
+                case ETUDIER: // yeux baissés sur le livre
+                    openEyes(g, cx, ey + 1, s, Math.max(1, eh - 1), eye);
+                    set(g, cx, my, EYE);
+                    return;
+                default: // méditation : yeux fermés, petit sourire
+                    int ly = ey + eh - 1;
+                    set(g, cx - s - 1, ly, EYE);
+                    set(g, cx - s, ly, EYE);
+                    set(g, cx + s, ly, EYE);
+                    set(g, cx + s + 1, ly, EYE);
+                    set(g, cx - 1, my, EYE);
+                    set(g, cx, my + 1, EYE);
+                    set(g, cx + 1, my, EYE);
+                    cheeks(g, cx, ey + eh, s);
+                    return;
+            }
+        }
         switch (expr) {
+            case CONCENTRE: // sans activité : visage content
             case DANSE:
                 if (shades) {
                     sunglasses(g, cx, ey, s);
@@ -443,6 +493,94 @@ public final class SpriteRenderer {
         set(g, cx + s + 2, y, CHEEK);
     }
 
+    // ---------------------------------------------------------------- activités
+
+    private static void drawMining(int[] g, int cx, int cy, int rx, int frame) {
+        int r = cx + rx;
+        // Rocher avec un cristal, posé au sol
+        int rcx = r + 6;
+        for (int y = 24; y <= 28; y++) {
+            for (int x = rcx - 3; x <= rcx + 3; x++) {
+                double u = (x - rcx) / 3.5, v = (y - 26) / 2.5;
+                if (u * u + v * v > 1.0) continue;
+                set(g, x, y, (u + v > 0.5) ? ROCKD : ROCK);
+            }
+        }
+        set(g, rcx - 1, 25, ACC);
+        set(g, rcx - 1, 24, ACC);
+        set(g, rcx, 25, ACC);
+
+        int hx = r + 1, hy = cy + 1;
+        if (frame == 0) { // pioche levée
+            for (int i = 0; i <= 4; i++) set(g, hx + i, hy - i, WOOD);
+            int ex = hx + 5, ey = hy - 5;
+            for (int k = -2; k <= 2; k++) set(g, ex + k, ey + k, METAL);
+        } else { // coup sur le rocher
+            for (int i = 0; i <= 3; i++) set(g, hx + i, hy + i, WOOD);
+            int ex = hx + 4, ey = hy + 4;
+            for (int k = -2; k <= 2; k++) set(g, ex - k, ey + k, METAL);
+        }
+    }
+
+    private static void drawBook(int[] g, Stage stage, int cx, int cy, int frame) {
+        int yb = cy + (stage == Stage.BEBE ? 2 : 3);
+        int bw = stage == Stage.BEBE ? 3 : 4;
+        for (int y = yb; y <= yb + 4; y++) {
+            for (int x = cx - bw; x <= cx + bw; x++) {
+                int c;
+                if (y == yb + 4 || x == cx - bw || x == cx + bw) c = ACC;
+                else if (x == cx) c = LINE;
+                else if ((y - yb) % 2 == 1 && ((x - cx) & 1) == 1) c = LINE;
+                else c = PAGE;
+                set(g, x, y, c);
+            }
+        }
+        if (frame == 1) { // page qui se tourne
+            set(g, cx + 1, yb - 1, PAGE);
+            set(g, cx + 2, yb - 1, PAGE);
+            set(g, cx + 2, yb - 2, PAGE);
+        }
+    }
+
+    private static void drawActivityEffects(int[] out, Occupation occ, Mood current,
+                                            int cx, int cy, int rx, int ry, int frame) {
+        switch (occ) {
+            case MINER:
+                if (frame == 1) {
+                    int r = cx + rx;
+                    putPx(out, r + 3, 22, C_SPARK);
+                    putPx(out, r + 2, 21, C_SPARK);
+                    putPx(out, r + 7, 22, C_SPARK);
+                    putPx(out, r + 8, 21, C_SPARK);
+                    putPx(out, r + 5, 21, C_WHITE);
+                    // goutte de sueur
+                    putPx(out, cx - rx + 1, cy - ry + 3, C_SWEAT);
+                    putPx(out, cx - rx + 1, cy - ry + 4, C_SWEAT);
+                }
+                break;
+            case ETUDIER:
+                if (frame == 1) { // petite idée
+                    int ix = cx + rx - 1, iy = cy - ry - 3;
+                    putPx(out, ix, iy, C_SPARK);
+                    putPx(out, ix - 1, iy, C_SPARK);
+                    putPx(out, ix + 1, iy, C_SPARK);
+                    putPx(out, ix, iy - 1, C_SPARK);
+                    putPx(out, ix, iy + 1, C_SPARK);
+                }
+                break;
+            default: { // aura de méditation qui tourne
+                int ac = mix(current.accent, C_WHITE, 0.3);
+                for (int k = 0; k < 8; k++) {
+                    double a = Math.toRadians(k * 45 + frame * 22.5);
+                    int x = (int) Math.round(cx + (rx + 2.5) * Math.cos(a));
+                    int y = (int) Math.round(cy + (ry + 2.5) * Math.sin(a));
+                    putPx(out, x, y, ac);
+                }
+                break;
+            }
+        }
+    }
+
     // ---------------------------------------------------------------- outils
 
     private static int topAt(int[] g, int x, int fallback) {
@@ -480,6 +618,12 @@ public final class SpriteRenderer {
             case WHITE: return C_WHITE;
             case CHEEK: return C_CHEEK;
             case MOUTH: return C_MOUTH;
+            case WOOD: return 0xFF9A6A3A;
+            case METAL: return 0xFFC8D0DC;
+            case ROCK: return 0xFF8A8499;
+            case ROCKD: return 0xFF5E596E;
+            case PAGE: return 0xFFF7F3E8;
+            case LINE: return 0xFFB8B0C8;
             default: return 0;
         }
     }

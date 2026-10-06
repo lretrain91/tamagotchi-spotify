@@ -27,6 +27,17 @@ class PetState {
     var lastEvent = "Fais-lui écouter ta musique pour faire éclore l'œuf."
     val history = mutableListOf<HistoryEntry>()
 
+    // --- Activités et compétences
+    var occupation: Occupation? = null
+    val stats = FloatArray(Stat.values().size)
+    /** Début du segment d'écoute pas encore comptabilisé (0 = pas de musique). */
+    var segStart = 0L
+    /** Affinité du morceau en cours avec chaque activité (0..1). */
+    var curAff = FloatArray(Occupation.values().size) { 0.3f }
+    var trackMaxMin = 10f
+    var trackCreditedMin = 0f
+    var activityMinutes = 0f
+
     val stage: Stage get() = Stage.forXp(xp)
 
     /** Ambiance la plus écoutée (hors « Curieux », sauf si rien d'autre). */
@@ -50,6 +61,7 @@ class PetState {
     fun expression(now: Long): Expression = when {
         stage == Stage.OEUF -> if (playing) Expression.DANSE else Expression.CONTENT
         hunger <= 0.5f -> Expression.MALADE
+        playing && occupation != null -> Expression.CONCENTRE
         playing -> Expression.DANSE
         isNight(now) -> Expression.DORT
         hunger < 20f -> Expression.AFFAME
@@ -60,6 +72,7 @@ class PetState {
 
     /** Fait passer le temps : faim et joie baissent, l'énergie remonte au repos. */
     fun tick(now: Long) {
+        credit(now)
         val dtH = ((now - lastTick).coerceAtLeast(0L) / 3_600_000f).coerceAtMost(72f)
         lastTick = now
         if (stage == Stage.OEUF) return
@@ -74,9 +87,68 @@ class PetState {
         clamp()
     }
 
-    /** Un nouveau morceau démarre : la musique nourrit la créature. */
-    fun onTrack(title: String, artist: String, mood: Mood, now: Long) {
+    /** Multiplicateur de gains entre l'activité choisie et le morceau en cours. */
+    fun synergy(): Float {
+        val o = occupation ?: return 1f
+        return Occupation.multiplier(curAff[o.ordinal])
+    }
+
+    /**
+     * Comptabilise les minutes de musique écoutées depuis le dernier passage :
+     * l'activité en cours rapporte des points de compétence au rythme de la musique.
+     */
+    fun credit(now: Long) {
+        if (!playing || segStart == 0L) {
+            segStart = if (playing) now else 0L
+            return
+        }
+        var minutes = ((now - segStart) / 60_000f).coerceAtLeast(0f)
+        segStart = now
+        // Jamais plus que la durée du morceau (évite les gains fantômes si une pause a été ratée).
+        minutes = minutes.coerceAtMost((trackMaxMin - trackCreditedMin).coerceAtLeast(0f))
+        trackCreditedMin += minutes
+        val o = occupation ?: return
+        if (stage == Stage.OEUF || minutes <= 0f) return
+        val gain = minutes * synergy()
+        for (st in Stat.values()) stats[st.ordinal] += gain * o.weight(st)
+        energy -= o.energyPerMin * minutes
+        hunger -= o.hungerPerMin * minutes
+        activityMinutes += minutes
+        clamp()
+        if (o.energyPerMin > 0f && energy < 8f) {
+            occupation = null
+            lastEvent = "$name est épuisé et arrête de ${o.verb}. Laisse-le se reposer ou méditer."
+        }
+    }
+
+    /** @return false si la créature refuse (œuf, trop fatiguée). */
+    fun setOccupation(o: Occupation?, now: Long): Boolean {
         tick(now)
+        if (o != null && stage == Stage.OEUF) {
+            lastEvent = "Un œuf ne peut pas encore ${o.verb} !"
+            return false
+        }
+        if (o != null && o.energyPerMin > 0f && energy < 15f) {
+            lastEvent = "$name est trop fatigué pour ${o.verb}."
+            return false
+        }
+        occupation = o
+        lastEvent = when {
+            o == null -> "$name se repose."
+            playing -> "$name commence à ${o.verb} : synergie ×${fmt(synergy())} (${Occupation.synergyLabel(synergy())})."
+            else -> "$name est prêt à ${o.verb}. Lance de la musique !"
+        }
+        return true
+    }
+
+    /** Un nouveau morceau démarre : la musique nourrit la créature. */
+    fun onTrack(title: String, artist: String, info: MoodResolver.TrackInfo, durationMs: Long, now: Long) {
+        tick(now)
+        val mood = info.mood
+        curAff = info.affinity.copyOf()
+        trackMaxMin = if (durationMs > 0) durationMs / 60_000f + 0.5f else 10f
+        trackCreditedMin = 0f
+        segStart = now
         val before = stage
         var streak = 0
         for (h in history) {
@@ -118,6 +190,11 @@ class PetState {
                 "$name a atteint sa forme adulte : ${f.label} !"
             }
             after != before -> "$name a grandi : le voilà ${after.label.lowercase()} !"
+            occupation != null -> {
+                val o = occupation!!
+                val m = synergy()
+                "${o.emoji} ${o.label} sur ce morceau : synergie ×${fmt(m)} (${Occupation.synergyLabel(m)})."
+            }
             streak >= 4 -> "Encore $artist ? $name commence à s'ennuyer…"
             !recent -> "Nouvelle découverte ! $name adore."
             else -> "Ambiance ${mood.label.lowercase()} : $name se trémousse."
@@ -182,10 +259,21 @@ class PetState {
             arr.put(JSONObject().put("t", h.title).put("a", h.artist).put("m", h.mood.name).put("ts", h.ts))
         }
         o.put("history", arr)
+        o.put("occupation", occupation?.name ?: "")
+        val st = JSONObject()
+        for (x in Stat.values()) st.put(x.name, stats[x.ordinal].toDouble())
+        o.put("stats", st)
+        o.put("segStart", segStart)
+        o.put("curAff", JSONArray().apply { curAff.forEach { put(it.toDouble()) } })
+        o.put("trackMaxMin", trackMaxMin.toDouble())
+        o.put("trackCreditedMin", trackCreditedMin.toDouble())
+        o.put("activityMinutes", activityMinutes.toDouble())
         return o.toString()
     }
 
     companion object {
+        fun fmt(f: Float): String = String.format(java.util.Locale.FRANCE, "%.1f", f)
+
         fun isNight(now: Long): Boolean {
             val hour = Calendar.getInstance().apply { timeInMillis = now }.get(Calendar.HOUR_OF_DAY)
             return hour >= 23 || hour < 7
@@ -228,6 +316,17 @@ class PetState {
                         )
                     }
                 }
+                s.occupation = Occupation.values().firstOrNull { it.name == o.optString("occupation") }
+                o.optJSONObject("stats")?.let { st ->
+                    for (x in Stat.values()) s.stats[x.ordinal] = st.optDouble(x.name, 0.0).toFloat()
+                }
+                s.segStart = o.optLong("segStart", 0L)
+                o.optJSONArray("curAff")?.let { a ->
+                    for (i in 0 until minOf(a.length(), s.curAff.size)) s.curAff[i] = a.optDouble(i, 0.3).toFloat()
+                }
+                s.trackMaxMin = o.optDouble("trackMaxMin", 10.0).toFloat()
+                s.trackCreditedMin = o.optDouble("trackCreditedMin", 0.0).toFloat()
+                s.activityMinutes = o.optDouble("activityMinutes", 0.0).toFloat()
             } catch (e: Exception) {
                 // État corrompu : on repart d'un œuf plutôt que de planter.
             }

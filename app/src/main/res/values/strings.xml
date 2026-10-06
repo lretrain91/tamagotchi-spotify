@@ -19,4 +19,10 @@
     <string name="stat_hunger">🍙 Faim</string>
     <string name="stat_energy">⚡ Énergie</string>
     <string name="stat_joy">💜 Joie</string>
+    <string name="section_activity">Activité</string>
+    <string name="section_skills">Compétences</string>
+    <string name="act_rest">💤\nRepos</string>
+    <string name="act_mine">⛏️\nMiner</string>
+    <string name="act_study">📚\nÉtudier</string>
+    <string name="act_meditate">🧘\nMéditer</string>
 </resources>

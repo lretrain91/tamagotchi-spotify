@@ -13,6 +13,7 @@ class PetWidgetProvider : AppWidgetProvider() {
 
     companion object {
         const val ACTION_PET = "fr.lretrain.melopet.ACTION_PET"
+        const val ACTION_CYCLE = "fr.lretrain.melopet.ACTION_CYCLE"
 
         fun updateAll(context: Context) {
             val ctx = context.applicationContext
@@ -23,11 +24,23 @@ class PetWidgetProvider : AppWidgetProvider() {
             val s = PetEngine.load(ctx).also { it.tick(now) }
             val expr = s.expression(now)
 
-            val views = RemoteViews(ctx.packageName, R.layout.widget_pet)
+            // Trois variantes du widget : l'animation suit le tempo du style écouté.
+            val layout = when (PetEngine.tempoMs(s)) {
+                in 0..500 -> R.layout.widget_pet_fast
+                in 501..700 -> R.layout.widget_pet
+                else -> R.layout.widget_pet_slow
+            }
+            val views = RemoteViews(ctx.packageName, layout)
             views.setImageViewBitmap(R.id.frame0, PetEngine.bitmap(s, 0, now))
             views.setImageViewBitmap(R.id.frame1, PetEngine.bitmap(s, 1, now))
             views.setTextViewText(R.id.w_name, "${s.name} · ${s.stage.label}")
-            views.setTextViewText(R.id.w_mood, "${expr.label} · ambiance ${s.currentMood.label.lowercase()}")
+            val occ = s.occupation
+            views.setTextViewText(
+                R.id.w_mood,
+                if (occ != null && s.playing) "${occ.emoji} ${occ.label} · synergie ×${PetState.fmt(s.synergy())}"
+                else "${expr.label} · ambiance ${s.currentMood.label.lowercase()}"
+            )
+            views.setTextViewText(R.id.w_act, if (occ != null) "${occ.emoji} ${occ.label}" else "💤 Repos")
             views.setTextViewText(
                 R.id.w_track,
                 if (s.playing && s.trackTitle.isNotEmpty()) "♪ ${s.trackTitle} — ${s.trackArtist}"
@@ -51,6 +64,12 @@ class PetWidgetProvider : AppWidgetProvider() {
             )
             views.setOnClickPendingIntent(R.id.w_pet, pet)
 
+            val cycle = PendingIntent.getBroadcast(
+                ctx, 2, Intent(ctx, PetWidgetProvider::class.java).setAction(ACTION_CYCLE),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            views.setOnClickPendingIntent(R.id.w_act, cycle)
+
             mgr.updateAppWidget(ids, views)
         }
     }
@@ -62,9 +81,24 @@ class PetWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_PET) {
-            PetEngine.edit(context) { it.pet(System.currentTimeMillis()) }
-            updateAll(context)
+        when (intent.action) {
+            ACTION_PET -> {
+                PetEngine.edit(context) { it.pet(System.currentTimeMillis()) }
+                updateAll(context)
+            }
+            ACTION_CYCLE -> {
+                // Repos → Miner → Étudier → Méditer → Repos
+                PetEngine.edit(context) {
+                    val order: List<Occupation?> = listOf(null) + Occupation.values().toList()
+                    val start = order.indexOf(it.occupation)
+                    // On saute les activités refusées (trop fatigué…) ; le repos est toujours accepté.
+                    for (step in 1..order.size) {
+                        val cand = order[(start + step) % order.size]
+                        if (it.setOccupation(cand, System.currentTimeMillis())) break
+                    }
+                }
+                updateAll(context)
+            }
         }
     }
 }

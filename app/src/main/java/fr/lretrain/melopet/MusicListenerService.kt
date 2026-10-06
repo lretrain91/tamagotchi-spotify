@@ -101,6 +101,7 @@ class MusicListenerService : NotificationListenerService() {
         // Les publicités de Spotify gratuit ne nourrissent pas la créature.
         if (artist.equals("Spotify", ignoreCase = true) || title.equals("Advertisement", ignoreCase = true)) return
         val playing = c.playbackState?.state == PlaybackState.STATE_PLAYING
-        PetEngine.onMedia(this, title, artist, playing)
+        val duration = md.getLong(MediaMetadata.METADATA_KEY_DURATION)
+        PetEngine.onMedia(this, title, artist, playing, duration)
     }
 }

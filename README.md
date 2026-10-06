@@ -16,6 +16,20 @@ Une petite créature en pixel art qui vit sur l'écran d'accueil de ton téléph
   Écouter des artistes variés la rend heureuse, mais le même artiste en boucle l'ennuie.
 - Tu peux la **caresser** (une fois toutes les 10 min) et **corriger l'ambiance** d'un artiste en touchant un morceau dans l'historique.
 
+## Activités et compétences
+
+![Miner, étudier, méditer](docs/activites.png)
+
+Choisis une activité dans l'appli (ou avec le bouton du widget). Elle progresse **à chaque minute de musique écoutée** et rapporte des points de compétence. Plus la musique colle à l'activité, plus la **synergie** est forte (de ×0,5 à ×2,5) :
+
+| Activité | Compétences | Musique idéale | Énergie |
+|---|---|---|---|
+| ⛏️ Miner | 💪 Force, ❤️ Vitalité | rock, metal, punk, rap, techno | en consomme beaucoup |
+| 📚 Étudier | 🧠 Intelligence, ✨ Magie | lo-fi, jazz, classique, piano | en consomme un peu |
+| 🧘 Méditer | ✨ Magie, ❤️ Vitalité | ambient, new age, drone | en redonne |
+
+Épuisée, la créature arrête de miner ou d'étudier : il faut la laisser se reposer ou méditer. L'animation suit le tempo du style écouté (rapide sur du rock, lente sur du jazz).
+
 ## Installer sur le téléphone
 
 1. Sur ton téléphone, ouvre la page **Releases** de ce dépôt et télécharge `melopet.apk` (dernière version).

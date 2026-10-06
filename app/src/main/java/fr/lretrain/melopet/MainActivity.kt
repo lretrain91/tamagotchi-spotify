@@ -43,6 +43,11 @@ class MainActivity : Activity() {
     private lateinit var setupCard: View
     private lateinit var moodBars: LinearLayout
     private lateinit var historyList: LinearLayout
+    private lateinit var actStatus: TextView
+    private lateinit var actButtons: Map<Occupation?, Button>
+    private val skillLabels = mutableMapOf<Stat, TextView>()
+    private val skillBars = mutableMapOf<Stat, ProgressBar>()
+    private var tempo = 650
 
     private val handler = Handler(Looper.getMainLooper())
     private var frame = 0
@@ -55,7 +60,7 @@ class MainActivity : Activity() {
             refresh()
             frame = 1 - frame
             frames[frame]?.let { showFrame(it) }
-            handler.postDelayed(this, 650)
+            handler.postDelayed(this, tempo.toLong())
         }
     }
 
@@ -73,6 +78,22 @@ class MainActivity : Activity() {
         setupCard = findViewById(R.id.setupCard)
         moodBars = findViewById(R.id.moodBars)
         historyList = findViewById(R.id.historyList)
+        actStatus = findViewById(R.id.actStatus)
+        actButtons = mapOf(
+            null to findViewById<Button>(R.id.actRest),
+            Occupation.MINER to findViewById<Button>(R.id.actMine),
+            Occupation.ETUDIER to findViewById<Button>(R.id.actStudy),
+            Occupation.MEDITER to findViewById<Button>(R.id.actMeditate)
+        )
+        for ((occ, btn) in actButtons) {
+            btn.setOnClickListener {
+                val ok = PetEngine.edit(this) { it.setOccupation(occ, System.currentTimeMillis()) }
+                if (!ok) Toast.makeText(this, PetEngine.load(this).lastEvent, Toast.LENGTH_SHORT).show()
+                PetWidgetProvider.updateAll(this)
+                refresh()
+            }
+        }
+        buildSkillRows()
 
         findViewById<Button>(R.id.btnPet).setOnClickListener {
             val ok = PetEngine.edit(this) { it.pet(System.currentTimeMillis()) }
@@ -139,12 +160,81 @@ class MainActivity : Activity() {
         barHunger.progress = s.hunger.toInt()
         barEnergy.progress = s.energy.toInt()
         barJoy.progress = s.joy.toInt()
+        tempo = PetEngine.tempoMs(s)
+        updateActivity(s)
+        updateSkills(s)
 
         val key = s.name + s.totalTracks + s.history.joinToString { it.mood.name }
         if (key != listKey) {
             listKey = key
             buildMoodBars(s)
             buildHistory(s)
+        }
+    }
+
+    private fun updateActivity(s: PetState) {
+        val occ = s.occupation
+        for ((o, btn) in actButtons) {
+            val selected = o == occ
+            btn.backgroundTintList = ColorStateList.valueOf(if (selected) 0xFFFFD166.toInt() else 0xFF1F1C30.toInt())
+            btn.setTextColor(if (selected) 0xFF14121F.toInt() else 0xFFE8E4F5.toInt())
+        }
+        actStatus.text = if (occ == null) {
+            buildString {
+                append("💤 ${s.name} se repose. Choisis une activité : elle progresse à chaque minute de musique.\n")
+                for (o in Occupation.values()) {
+                    append("\n${o.emoji} ${o.label} → ${gainsText(o)}\n    idéal : ${o.bestMusic}")
+                }
+            }
+        } else {
+            val m = s.synergy()
+            buildString {
+                append("${occ.emoji} ${occ.label}")
+                if (s.playing && s.trackTitle.isNotEmpty()) {
+                    append(" au rythme de « ${s.trackTitle} »\n")
+                    append("Synergie : ×${PetState.fmt(m)} (${Occupation.synergyLabel(m)})")
+                } else {
+                    append(" · en attente de musique")
+                }
+                append("\nGains : ${gainsText(occ)}")
+                append("\nMusique idéale : ${occ.bestMusic}")
+                append("\nTemps d'activité total : ${s.activityMinutes.toInt()} min")
+            }
+        }
+    }
+
+    private fun gainsText(o: Occupation): String =
+        Stat.values().filter { o.weight(it) > 0f }
+            .joinToString(", ") { "${it.emoji} ${it.label}" }
+
+    private fun buildSkillRows() {
+        val list = findViewById<LinearLayout>(R.id.skillList)
+        for (st in Stat.values()) {
+            val label = TextView(this).apply {
+                setTextColor(0xFFE8E4F5.toInt())
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setPadding(0, dp(6), 0, dp(2))
+            }
+            val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+                max = 100
+                progressTintList = ColorStateList.valueOf(0xFFFFD166.toInt())
+                progressBackgroundTintList = ColorStateList.valueOf(0x33FFFFFF)
+            }
+            list.addView(label)
+            list.addView(bar)
+            skillLabels[st] = label
+            skillBars[st] = bar
+        }
+    }
+
+    private fun updateSkills(s: PetState) {
+        for (st in Stat.values()) {
+            val pts = s.stats[st.ordinal]
+            val lvl = Stat.level(pts)
+            val from = Stat.pointsForLevel(lvl)
+            val to = Stat.pointsForLevel(lvl + 1)
+            skillLabels[st]?.text = "${st.emoji} ${st.label} · niv. $lvl  —  ${PetState.fmt(pts)} pts"
+            skillBars[st]?.progress = (((pts - from) / (to - from)) * 100f).toInt().coerceIn(0, 100)
         }
     }
 
