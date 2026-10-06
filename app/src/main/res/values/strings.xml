@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Mélopet</string>
+    <string name="listener_label">Mélopet — écoute de Spotify</string>
+    <string name="widget_description">Ta créature qui évolue avec ta musique</string>
+
+    <string name="setup_title">Pour réagir à ta musique, Mélopet doit voir ce que joue Spotify.</string>
+    <string name="setup_body">Active « Mélopet » dans l\'accès aux notifications. L\'appli ne lit pas tes notifications, elle suit seulement le lecteur de Spotify.\n\nSi l\'interrupteur est grisé (« paramètre restreint ») : ouvre les infos de l\'appli, touche ⋮ en haut à droite puis « Autoriser les paramètres restreints », et réessaie.</string>
+    <string name="setup_button">Activer l\'accès</string>
+    <string name="app_info_button">Infos de l\'appli (paramètres restreints)</string>
+    <string name="pet_button">Caresser 💜</string>
+    <string name="widget_button">Ajouter le widget à l\'écran d\'accueil</string>
+    <string name="section_needs">Besoins</string>
+    <string name="section_tastes">Ses goûts musicaux</string>
+    <string name="section_history">Derniers morceaux</string>
+    <string name="history_hint">Touche un morceau pour corriger l\'ambiance de l\'artiste.</string>
+    <string name="credits">Genres musicaux fournis par MusicBrainz</string>
+    <string name="pet_image_desc">Ta créature</string>
+    <string name="stat_hunger">🍙 Faim</string>
+    <string name="stat_energy">⚡ Énergie</string>
+    <string name="stat_joy">💜 Joie</string>
+</resources>

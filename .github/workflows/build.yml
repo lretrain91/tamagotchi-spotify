@@ -1,0 +1,44 @@
+name: Construire l'APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Compiler
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - name: Renommer l'APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk melopet.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: melopet-apk
+          path: melopet.apk
+
+      - name: Publier la release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: Mélopet ${{ github.run_number }}
+          body: Télécharge `melopet.apk` ci-dessous depuis ton téléphone pour l'installer ou le mettre à jour.
+          files: melopet.apk
+          make_latest: true

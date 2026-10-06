@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Petite créature rose en pixels, avec une note de musique -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- contour -->
+    <path
+        android:fillColor="#FF1E1A2B"
+        android:pathData="M42,34h24v3h6v3h3v6h3v20h-3v6h-3v3h-36v-3h-3v-6h-3v-20h3v-6h3v-3h6z" />
+    <!-- corps -->
+    <path
+        android:fillColor="#FFFF8FC7"
+        android:pathData="M42,37h24v3h6v6h3v20h-3v6h-42v-6h-3v-20h3v-6h6v-3z" />
+    <!-- ombre -->
+    <path
+        android:fillColor="#FFD35E9C"
+        android:pathData="M66,63h6v3h-3v6h-12v-3h6v-3h3z" />
+    <!-- reflet -->
+    <path
+        android:fillColor="#FFFFD1E8"
+        android:pathData="M42,43h6v6h-6z" />
+    <!-- yeux -->
+    <path
+        android:fillColor="#FF1E1A2B"
+        android:pathData="M45,52h6v9h-6zM57,52h6v9h-6z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M45,52h3v3h-3zM57,52h3v3h-3z" />
+    <!-- sourire -->
+    <path
+        android:fillColor="#FF1E1A2B"
+        android:pathData="M48,64h3v3h6v-3h3v3h-3v3h-6v-3h-3z" />
+    <!-- note -->
+    <path
+        android:fillColor="#FF7CF7FF"
+        android:pathData="M76,26h9v4h-5v14h-8v-6h4z" />
+</vector>
